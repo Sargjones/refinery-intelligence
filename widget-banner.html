@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:transparent; font-family: -apple-system, 'Segoe UI', sans-serif; }
+
+  .banner {
+    background: #0d1117;
+    border: 1px solid rgba(248,81,73,0.35);
+    border-radius: 10px;
+    padding: 14px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+  }
+  .banner::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, #f85149, #e3b341, #f85149);
+    background-size: 200% 100%;
+    animation: shimmer 3s linear infinite;
+  }
+  @keyframes shimmer { to { background-position: 200% 0; } }
+
+  .left { display:flex; align-items:center; gap:14px; flex:1; min-width:0; }
+
+  .icon-wrap {
+    width: 36px; height: 36px; flex-shrink: 0;
+    background: rgba(248,81,73,0.12);
+    border: 1px solid rgba(248,81,73,0.3);
+    border-radius: 8px;
+    display: flex; align-items:center; justify-content:center;
+  }
+  .icon-wrap svg { width:18px; height:18px; }
+
+  .text-block { min-width:0; }
+  .alert-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #f85149;
+    display: flex; align-items: center; gap: 5px;
+    margin-bottom: 3px;
+  }
+  .pulse { width:5px; height:5px; border-radius:50%; background:#f85149; animation:pulse 1.4s ease-in-out infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  .alert-text {
+    font-size: 13px;
+    font-weight: 500;
+    color: #e6edf3;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .alert-sub {
+    font-size: 11px;
+    color: #8b949e;
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .middle {
+    display: flex;
+    gap: 16px;
+    flex-shrink: 0;
+  }
+  .stat { text-align: center; }
+  .stat-val {
+    font-size: 18px;
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+    line-height: 1;
+  }
+  .stat-label {
+    font-size: 9px;
+    color: #8b949e;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-top: 2px;
+  }
+  .red { color: #f85149; }
+  .amber { color: #e3b341; }
+
+  .divider {
+    width: 1px; background: rgba(255,255,255,0.08);
+    align-self: stretch; flex-shrink: 0;
+  }
+
+  .cta {
+    flex-shrink: 0;
+    background: rgba(248,81,73,0.1);
+    border: 1px solid rgba(248,81,73,0.35);
+    border-radius: 7px;
+    padding: 8px 14px;
+    color: #f85149;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.15s;
+    white-space: nowrap;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .cta:hover { background: rgba(248,81,73,0.2); color: #ff6b63; }
+  .cta svg { width:12px; height:12px; }
+
+  /* Brent chip */
+  .brent-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: rgba(227,179,65,0.1);
+    border: 1px solid rgba(227,179,65,0.25);
+    border-radius: 5px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-family: 'Courier New', monospace;
+    color: #e3b341;
+    margin-top: 4px;
+  }
+
+  @media (max-width: 600px) {
+    .middle { display: none; }
+    .alert-text { font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+<div class="banner">
+  <div class="left">
+    <div class="icon-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="#f85149" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 8v4M12 16h.01"/>
+      </svg>
+    </div>
+    <div class="text-block">
+      <div class="alert-label">
+        <div class="pulse"></div>
+        Global Energy Alert
+      </div>
+      <div class="alert-text">Strait of Hormuz closed — Day <span id="war-day" style="color:#f85149;font-weight:700">80</span> · ~20% of world oil trade blocked</div>
+      <div class="alert-sub">
+        7 US refineries closed 2019–2026 · California lost 17% refining capacity (2025–26)
+        <div class="brent-chip">Brent <span id="brent-price">loading…</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="middle">
+    <div class="stat">
+      <div class="stat-val red" id="banner-war-days">80</div>
+      <div class="stat-label">Days closed</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+      <div class="stat-val amber">9.69M</div>
+      <div class="stat-label">b/d lost 2019–26</div>
+    </div>
+    <div class="divider"></div>
+    <div class="stat">
+      <div class="stat-val red">21</div>
+      <div class="stat-label">Days jet fuel</div>
+    </div>
+  </div>
+
+  <a class="cta" href="https://fuel.criticalto.ca" target="_blank">
+    Refinery Map
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M7 17L17 7M17 7H7M17 7v10"/>
+    </svg>
+  </a>
+</div>
+
+<script>
+  const warStart = new Date('2026-02-28T00:00:00Z');
+  const now = new Date();
+  const days = Math.floor((now - warStart) / 86400000);
+  document.getElementById('war-day').textContent = days;
+  document.getElementById('banner-war-days').textContent = days;
+
+  // Pull Brent from CSI-Global
+  fetch('https://raw.githubusercontent.com/Sargjones/csi-global/main/csi_data_latest.json')
+    .then(r => r.json())
+    .then(data => {
+      const brent = (data.indicators || []).find(i =>
+        i.indicator && i.indicator.toLowerCase().includes('brent')
+      );
+      if (brent && brent.value) {
+        document.getElementById('brent-price').textContent =
+          `$${brent.value} ${brent.unit || '/bbl'}`;
+      }
+    })
+    .catch(() => {
+      document.getElementById('brent-price').textContent = 'see dashboard';
+    });
+</script>
+</body>
+</html>

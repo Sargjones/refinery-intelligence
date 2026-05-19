@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Global Refinery Intelligence Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/topojson/3.0.2/topojson.min.js"></script>
+<style>
+:root {
+  --bg: #0d1117;
+  --bg2: #161b22;
+  --bg3: #1c2128;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #e6edf3;
+  --text2: #8b949e;
+  --text3: #484f58;
+  --red: #f85149;
+  --amber: #e3b341;
+  --green: #3fb950;
+  --blue: #58a6ff;
+  --teal: #39d353;
+  --purple: #bc8cff;
+  --orange: #f0883e;
+  --font: 'Space Grotesk', sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:var(--bg); color:var(--text); font-family:var(--font); font-size:14px; min-height:100vh; }
+
+.header {
+  background:var(--bg2);
+  border-bottom:1px solid var(--border);
+  padding:16px 24px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  position:sticky;
+  top:0;
+  z-index:100;
+}
+.header-left { display:flex; align-items:center; gap:12px; }
+.logo { width:32px; height:32px; }
+.logo-text h1 { font-size:16px; font-weight:600; letter-spacing:-0.02em; }
+.logo-text p { font-size:11px; color:var(--text2); font-family:var(--mono); }
+.header-status { display:flex; align-items:center; gap:16px; }
+.status-pill {
+  display:flex; align-items:center; gap:6px;
+  background:rgba(248,81,73,0.1);
+  border:1px solid rgba(248,81,73,0.3);
+  border-radius:20px;
+  padding:4px 12px;
+  font-size:11px;
+  font-family:var(--mono);
+  color:var(--red);
+}
+.pulse { width:6px; height:6px; border-radius:50%; background:var(--red); animation:pulse 1.5s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(1.3)} }
+.nav { display:flex; gap:2px; }
+.nav-btn {
+  background:none; border:none; color:var(--text2);
+  padding:6px 12px; border-radius:6px; cursor:pointer;
+  font-family:var(--font); font-size:12px; font-weight:500;
+  transition:all 0.15s;
+}
+.nav-btn:hover { background:var(--bg3); color:var(--text); }
+.nav-btn.active { background:var(--bg3); color:var(--text); }
+
+.main { display:grid; grid-template-columns:1fr 320px; gap:0; min-height:calc(100vh - 61px); }
+.map-panel { border-right:1px solid var(--border); position:relative; overflow:hidden; }
+.sidebar { overflow-y:auto; }
+
+.map-controls {
+  position:absolute; top:16px; left:16px; z-index:10;
+  display:flex; flex-direction:column; gap:8px;
+}
+.map-toggle-group { display:flex; flex-direction:column; gap:4px; }
+.map-toggle {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:8px; padding:6px 10px;
+  color:var(--text2); font-family:var(--font); font-size:11px;
+  cursor:pointer; display:flex; align-items:center; gap:6px;
+  transition:all 0.15s;
+}
+.map-toggle:hover { border-color:var(--border2); color:var(--text); }
+.map-toggle.on { border-color:var(--blue); color:var(--blue); background:rgba(88,166,255,0.08); }
+.map-toggle-dot { width:8px; height:8px; border-radius:50%; }
+
+.map-legend {
+  position:absolute; bottom:16px; left:16px; z-index:10;
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:8px; padding:10px 12px;
+}
+.legend-title { font-size:10px; color:var(--text3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.05em; margin-bottom:8px; }
+.legend-item { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text2); margin-bottom:4px; }
+.legend-dot { width:10px; height:10px; border-radius:50%; flex-shrink:0; }
+
+.map-view-tabs {
+  position:absolute; top:16px; right:16px; z-index:10;
+  display:flex; background:var(--bg2); border:1px solid var(--border); border-radius:8px; overflow:hidden;
+}
+.view-tab {
+  background:none; border:none; padding:6px 12px; cursor:pointer;
+  font-family:var(--mono); font-size:11px; color:var(--text2); transition:all 0.15s;
+}
+.view-tab.active { background:var(--bg3); color:var(--text); }
+
+#world-map svg { width:100%; height:100%; cursor:grab; }
+#world-map svg:active { cursor:grabbing; }
+.country { fill:var(--bg3); stroke:var(--border); stroke-width:0.5; transition:fill 0.15s; }
+.country:hover { fill:var(--bg2); }
+.country.has-refinery { fill:#1a2332; }
+.country.closed { fill:#1f1a1a; }
+
+.refinery-dot {
+  cursor:pointer;
+  transition:all 0.15s;
+}
+.refinery-dot:hover circle { stroke-width:2; }
+
+.tooltip {
+  position:absolute;
+  background:var(--bg2);
+  border:1px solid var(--border2);
+  border-radius:8px;
+  padding:10px 12px;
+  font-size:12px;
+  pointer-events:none;
+  opacity:0;
+  transition:opacity 0.15s;
+  z-index:50;
+  max-width:220px;
+}
+.tooltip.visible { opacity:1; }
+.tooltip-name { font-weight:600; color:var(--text); margin-bottom:4px; }
+.tooltip-detail { color:var(--text2); line-height:1.4; }
+.tooltip-status { display:inline-block; margin-top:6px; font-size:10px; font-family:var(--mono); padding:2px 6px; border-radius:4px; }
+.tooltip-status.operating { background:rgba(63,185,80,0.15); color:var(--green); border:1px solid rgba(63,185,80,0.3); }
+.tooltip-status.closed { background:rgba(248,81,73,0.15); color:var(--red); border:1px solid rgba(248,81,73,0.3); }
+.tooltip-status.damaged { background:rgba(227,179,65,0.15); color:var(--amber); border:1px solid rgba(227,179,65,0.3); }
+.tooltip-status.converted { background:rgba(188,140,255,0.15); color:var(--purple); border:1px solid rgba(188,140,255,0.3); }
+.tooltip-status.at-risk { background:rgba(240,136,62,0.15); color:var(--orange); border:1px solid rgba(240,136,62,0.3); }
+
+.sidebar { background:var(--bg); }
+.sidebar-section { border-bottom:1px solid var(--border); padding:16px; }
+.section-label {
+  font-size:10px; color:var(--text3); font-family:var(--mono);
+  text-transform:uppercase; letter-spacing:0.08em; margin-bottom:12px;
+}
+
+.stat-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:4px; }
+.stat-card {
+  background:var(--bg2); border:1px solid var(--border);
+  border-radius:8px; padding:10px 12px;
+}
+.stat-val { font-size:22px; font-weight:600; font-family:var(--mono); line-height:1; }
+.stat-label { font-size:10px; color:var(--text2); margin-top:4px; }
+.stat-delta { font-size:10px; font-family:var(--mono); margin-top:2px; }
+.delta-bad { color:var(--red); }
+.delta-ok { color:var(--amber); }
+
+.war-clock {
+  background:rgba(248,81,73,0.08);
+  border:1px solid rgba(248,81,73,0.2);
+  border-radius:8px; padding:12px;
+  margin-bottom:12px;
+}
+.war-clock-label { font-size:10px; color:var(--red); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px; }
+.war-clock-days { font-size:36px; font-weight:600; font-family:var(--mono); color:var(--red); line-height:1; }
+.war-clock-sub { font-size:11px; color:var(--text2); margin-top:4px; }
+
+.timeline { position:relative; padding-left:16px; }
+.timeline::before { content:''; position:absolute; left:6px; top:4px; bottom:4px; width:1px; background:var(--border); }
+.timeline-item { position:relative; margin-bottom:12px; }
+.timeline-dot {
+  position:absolute; left:-14px; top:4px;
+  width:8px; height:8px; border-radius:50%;
+  border:1px solid var(--bg);
+}
+.timeline-date { font-size:10px; font-family:var(--mono); color:var(--text3); }
+.timeline-event { font-size:12px; color:var(--text2); margin-top:2px; line-height:1.4; }
+.timeline-event strong { color:var(--text); }
+
+.live-indicators { display:flex; flex-direction:column; gap:8px; }
+.indicator-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 10px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:6px;
+}
+.indicator-name { font-size:12px; color:var(--text2); }
+.indicator-val { font-family:var(--mono); font-size:13px; font-weight:500; }
+.indicator-status { font-size:10px; font-family:var(--mono); padding:2px 6px; border-radius:4px; }
+.ok { color:var(--green); }
+.watch { color:var(--amber); }
+.alert { color:var(--red); }
+.s-ok { background:rgba(63,185,80,0.1); color:var(--green); }
+.s-watch { background:rgba(227,179,65,0.1); color:var(--amber); }
+.s-alert { background:rgba(248,81,73,0.1); color:var(--red); }
+
+.process-explainer { padding:16px; }
+.process-title { font-size:14px; font-weight:600; margin-bottom:4px; }
+.process-sub { font-size:12px; color:var(--text2); margin-bottom:14px; line-height:1.5; }
+
+.process-flow { display:flex; flex-direction:column; gap:0; }
+.process-step {
+  display:flex; gap:12px; position:relative;
+  padding-bottom:16px; cursor:pointer;
+}
+.process-step:last-child { padding-bottom:0; }
+.step-line {
+  display:flex; flex-direction:column; align-items:center; flex-shrink:0;
+}
+.step-num {
+  width:28px; height:28px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-size:11px; font-weight:600; font-family:var(--mono);
+  flex-shrink:0;
+}
+.step-connector {
+  width:1px; flex:1; margin-top:4px;
+  background:var(--border);
+}
+.process-step:last-child .step-connector { display:none; }
+.step-body { flex:1; padding-bottom:4px; }
+.step-name { font-size:13px; font-weight:600; color:var(--text); }
+.step-location { font-size:10px; font-family:var(--mono); margin-top:2px; }
+.step-desc { font-size:11px; color:var(--text2); margin-top:4px; line-height:1.5; display:none; }
+.process-step.open .step-desc { display:block; }
+.step-arrow { font-size:10px; color:var(--text3); transition:transform 0.2s; margin-left:auto; padding-top:6px; }
+.process-step.open .step-arrow { transform:rotate(90deg); }
+
+.transport-badge {
+  display:inline-flex; align-items:center; gap:4px;
+  font-size:10px; font-family:var(--mono);
+  padding:2px 6px; border-radius:4px;
+  margin-top:6px;
+  background:rgba(88,166,255,0.08);
+  border:1px solid rgba(88,166,255,0.2);
+  color:var(--blue);
+}
+
+.map-wrapper { width:100%; height:calc(100vh - 61px); position:relative; }
+#world-map { width:100%; height:100%; }
+
+.footer-bar {
+  position:fixed; bottom:0; left:0; right:0;
+  background:var(--bg2); border-top:1px solid var(--border);
+  padding:6px 24px;
+  display:flex; align-items:center; justify-content:space-between;
+  font-size:11px; color:var(--text3); font-family:var(--mono);
+  z-index:100;
+}
+
+.refinery-list { max-height:300px; overflow-y:auto; }
+.refinery-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:8px 0;
+  border-bottom:1px solid var(--border);
+  font-size:12px;
+  cursor:pointer;
+  transition:background 0.1s;
+}
+.refinery-row:hover { background:var(--bg2); padding-left:4px; border-radius:4px; }
+.refinery-row:last-child { border-bottom:none; }
+.ref-name { color:var(--text); font-weight:500; }
+.ref-loc { color:var(--text3); font-size:10px; font-family:var(--mono); }
+.ref-cap { color:var(--text2); font-family:var(--mono); }
+
+.capacity-bar-wrap { margin-top:12px; }
+.capacity-label { font-size:11px; color:var(--text2); display:flex; justify-content:space-between; margin-bottom:4px; }
+.capacity-bar { height:4px; background:var(--bg3); border-radius:2px; overflow:hidden; }
+.capacity-fill { height:100%; border-radius:2px; transition:width 0.5s; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <svg class="logo" viewBox="0 0 32 32" fill="none">
+      <circle cx="16" cy="16" r="14" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>
+      <circle cx="16" cy="16" r="6" fill="rgba(248,81,73,0.3)" stroke="#f85149" stroke-width="1"/>
+      <line x1="16" y1="2" x2="16" y2="10" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>
+      <line x1="16" y1="22" x2="16" y2="30" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>
+      <line x1="2" y1="16" x2="10" y2="16" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>
+      <line x1="22" y1="16" x2="30" y2="16" stroke="#58a6ff" stroke-width="1" opacity="0.5"/>
+    </svg>
+    <div class="logo-text">
+      <h1>Global Refinery Intelligence</h1>
+      <p>criticalto.ca / global energy infrastructure</p>
+    </div>
+  </div>
+  <div class="header-status">
+    <div class="status-pill">
+      <div class="pulse"></div>
+      HORMUZ CLOSED — DAY <span id="war-day-header">80</span>
+    </div>
+    <div class="nav">
+      <button class="nav-btn active" onclick="showPanel('map')">Map</button>
+      <button class="nav-btn" onclick="showPanel('process')">How It Works</button>
+      <button class="nav-btn" onclick="showPanel('data')">Live Data</button>
+    </div>
+  </div>
+</div>
+
+<div class="main" id="panel-map">
+  <div class="map-panel">
+    <div class="map-wrapper">
+      <div class="map-controls">
+        <div class="section-label">Show</div>
+        <div class="map-toggle-group">
+          <button class="map-toggle on" id="toggle-operating" onclick="toggleLayer('operating')">
+            <div class="map-toggle-dot" style="background:var(--green)"></div>Operating
+          </button>
+          <button class="map-toggle on" id="toggle-closed" onclick="toggleLayer('closed')">
+            <div class="map-toggle-dot" style="background:var(--red)"></div>Closed / Idled
+          </button>
+          <button class="map-toggle on" id="toggle-damaged" onclick="toggleLayer('damaged')">
+            <div class="map-toggle-dot" style="background:var(--amber)"></div>War-Damaged
+          </button>
+          <button class="map-toggle on" id="toggle-converted" onclick="toggleLayer('converted')">
+            <div class="map-toggle-dot" style="background:var(--purple)"></div>Converted
+          </button>
+        </div>
+      </div>
+
+      <div class="map-view-tabs">
+        <button class="view-tab active" onclick="switchView('world')">World</button>
+        <button class="view-tab" onclick="switchView('namerica')">North America</button>
+        <button class="view-tab" onclick="switchView('gulf')">Gulf Region</button>
+      </div>
+
+      <div class="map-legend">
+        <div class="legend-title">Refinery Status</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Operating</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>Closed / Idled</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>War-damaged / reduced</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>Converted to renewables</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>At risk 2026–27</div>
+        <div style="margin-top:8px; font-size:10px; color:var(--text3)">Dot size = capacity (kb/d)</div>
+      </div>
+
+      <div id="world-map"></div>
+    </div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <div class="sidebar">
+    <div class="sidebar-section">
+      <div class="section-label">Hormuz War Clock</div>
+      <div class="war-clock">
+        <div class="war-clock-label">Days since closure — Feb 28, 2026</div>
+        <div class="war-clock-days" id="war-days">80</div>
+        <div class="war-clock-sub">~9.1 mb/d Gulf production shut-in · 21 days jet fuel supply (US)</div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-val" style="color:var(--red)">9.69M</div>
+          <div class="stat-label">b/d capacity lost 2019–2026</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val" style="color:var(--amber)">3.52M</div>
+          <div class="stat-label">b/d war-damaged (May 2026)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">132</div>
+          <div class="stat-label">US refineries operating</div>
+          <div class="stat-delta delta-bad">↓7 since 2019</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-val">17%</div>
+          <div class="stat-label">CA capacity lost 2025–26</div>
+          <div class="stat-delta delta-bad">PH66 LA + Benicia</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Key Events</div>
+      <div class="timeline">
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--red)"></div>
+          <div class="timeline-date">Feb 28, 2026</div>
+          <div class="timeline-event"><strong>US-Iran war begins.</strong> Hormuz tanker attacks start.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--amber)"></div>
+          <div class="timeline-date">Mar 4, 2026</div>
+          <div class="timeline-event"><strong>Hormuz declared closed.</strong> Iran ships attacks on transiting vessels.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--orange)"></div>
+          <div class="timeline-date">Mar–Apr, 2026</div>
+          <div class="timeline-event"><strong>Valero Benicia idles.</strong> Phased shutdown complete. CA loses 17% refining capacity.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--red)"></div>
+          <div class="timeline-date">Apr 12, 2026</div>
+          <div class="timeline-event"><strong>US blockade declared.</strong> Trump announces blockade of Hormuz shipping.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--amber)"></div>
+          <div class="timeline-date">May 7, 2026</div>
+          <div class="timeline-event"><strong>3.52 mb/d offline.</strong> IIR: Gulf refinery damage deepens global crunch. Ras Tanura partially back.</div>
+        </div>
+        <div class="timeline-item">
+          <div class="timeline-dot" style="background:var(--blue)"></div>
+          <div class="timeline-date">May 19, 2026</div>
+          <div class="timeline-event"><strong>Today.</strong> North American airline route cuts emerging. CA pump prices ~$4.80/gal.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Notable Refinery Closures 2019–2026</div>
+      <div class="refinery-list" id="closure-list"></div>
+    </div>
+
+    <div class="sidebar-section">
+      <div class="section-label">Live CSI-Global Indicators</div>
+      <div class="live-indicators" id="live-indicators">
+        <div class="indicator-row">
+          <div>
+            <div class="indicator-name">Brent Crude</div>
+          </div>
+          <div style="text-align:right">
+            <div class="indicator-val alert" id="brent-val">Loading…</div>
+            <div class="indicator-status s-alert" id="brent-status">—</div>
+          </div>
+        </div>
+        <div class="indicator-row">
+          <div>
+            <div class="indicator-name">Baltic Dry Index</div>
+          </div>
+          <div style="text-align:right">
+            <div class="indicator-val" id="bdi-val">—</div>
+            <div class="indicator-status" id="bdi-status">—</div>
+          </div>
+        </div>
+        <div class="indicator-row">
+          <div>
+            <div class="indicator-name">FAO Food Price Index</div>
+          </div>
+          <div style="text-align:right">
+            <div class="indicator-val" id="fao-val">—</div>
+            <div class="indicator-status" id="fao-status">—</div>
+          </div>
+        </div>
+        <div class="indicator-row">
+          <div>
+            <div class="indicator-name">GDELT Supply Shock</div>
+          </div>
+          <div style="text-align:right">
+            <div class="indicator-val" id="gdelt-val">—</div>
+            <div class="indicator-status" id="gdelt-status">—</div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10px; color:var(--text3); margin-top:8px; font-family:var(--mono);">
+        Source: CSI-Global · github.com/Sargjones/csi-global
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="panel-process" style="display:none; padding:24px; max-width:900px; margin:0 auto;">
+  <div class="process-title" style="font-size:20px; margin-bottom:8px;">How Crude Oil Becomes Fuel — The Full Chain</div>
+  <div class="process-sub">Most people never see how raw crude oil becomes the gasoline in their car, the jet fuel in a plane, or the asphalt on a road. Each step happens in a specific place, often hundreds or thousands of kilometres apart, connected by pipelines, tankers, and trucks. A disruption anywhere in this chain propagates downstream within days to weeks.</div>
+
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+    <div class="process-flow" id="process-flow"></div>
+    <div>
+      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px; margin-bottom:16px;">
+        <div class="section-label">Why This Matters Right Now</div>
+        <p style="font-size:12px; color:var(--text2); line-height:1.6; margin-bottom:8px;">The Hormuz closure has blocked <strong style="color:var(--text)">~20% of global oil trade</strong> at Step 1 (extraction/export). But the damage cascades:</p>
+        <ul style="font-size:12px; color:var(--text2); line-height:1.7; padding-left:16px;">
+          <li>Refineries configured for Gulf crude cannot easily switch feedstock</li>
+          <li>North America's refinery base is already at 92%+ utilization</li>
+          <li>7 major US refinery closures since 2019 left no spare throughput</li>
+          <li>Jet fuel is the most exposed product — only 21 days supply in 2026</li>
+          <li>Fertilizer (Step 4 byproduct) impacts food prices within one growing season</li>
+        </ul>
+      </div>
+      <div style="background:var(--bg2); border:1px solid var(--border); border-radius:10px; padding:16px;">
+        <div class="section-label">North America's Relative Position</div>
+        <div class="capacity-bar-wrap">
+          <div class="capacity-label"><span>US domestic crude production</span><span style="color:var(--green)">13.6 mb/d</span></div>
+          <div class="capacity-bar"><div class="capacity-fill" style="width:92%; background:var(--green)"></div></div>
+        </div>
+        <div class="capacity-bar-wrap" style="margin-top:10px">
+          <div class="capacity-label"><span>US refinery utilization</span><span style="color:var(--amber)">92%+</span></div>
+          <div class="capacity-bar"><div class="capacity-fill" style="width:92%; background:var(--amber)"></div></div>
+        </div>
+        <div class="capacity-bar-wrap" style="margin-top:10px">
+          <div class="capacity-label"><span>CA refinery capacity remaining</span><span style="color:var(--red)">83%</span></div>
+          <div class="capacity-bar"><div class="capacity-fill" style="width:83%; background:var(--red)"></div></div>
+        </div>
+        <div class="capacity-bar-wrap" style="margin-top:10px">
+          <div class="capacity-label"><span>Days of jet fuel supply (US)</span><span style="color:var(--red)">21</span></div>
+          <div class="capacity-bar"><div class="capacity-fill" style="width:21%; background:var(--red)"></div></div>
+        </div>
+        <p style="font-size:10px; color:var(--text3); margin-top:10px; font-family:var(--mono);">Sources: EIA STEO May 2026 · DWU Consulting · Argus Media</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="panel-data" style="display:none; padding:24px;">
+  <div style="font-size:18px; font-weight:600; margin-bottom:16px;">Live Data — Coming Soon</div>
+  <p style="color:var(--text2); font-size:13px; line-height:1.6;">This panel will pull from <code style="font-family:var(--mono); background:var(--bg2); padding:2px 6px; border-radius:4px;">csi_data_latest.json</code> hosted on your CSI-Global GitHub repo, plus EIA Weekly Petroleum Status Report (Wednesdays) and crack spread data.</p>
+  <p style="color:var(--text2); font-size:13px; line-height:1.6; margin-top:8px;">To activate: add the raw data URL to the config at the top of this file once hosted on a new repo.</p>
+</div>
+
+<div class="footer-bar">
+  <span>Global Refinery Intelligence · criticalto.ca · Data: EIA, IIR, Argus Media, IEA, CSI-Global</span>
+  <span id="last-updated">Updated: May 19, 2026</span>
+</div>
+
+<script>
+const REFINERIES = [
+  { name:"Ras Tanura", country:"Saudi Arabia", lat:26.7, lon:50.15, cap:550, status:"damaged", note:"Saudi Aramco's largest; partially restarted May 2026" },
+  { name:"Ruwais Refinery", country:"UAE", lat:24.1, lon:52.7, cap:817, status:"damaged", note:"ADNOC; reduced operations due to Hormuz closure" },
+  { name:"Al-Zour", country:"Kuwait", lat:28.55, lon:48.35, cap:615, status:"damaged", note:"Kuwait's largest; lowered processing rates since March 2026" },
+  { name:"Mina Al-Ahmadi", country:"Kuwait", lat:29.07, lon:48.14, cap:466, status:"damaged", note:"Hit by drones; reduced capacity" },
+  { name:"Mina Abdullah", country:"Kuwait", lat:28.93, lon:48.18, cap:270, status:"damaged", note:"Hit by drones; reduced capacity" },
+  { name:"Abadan", country:"Iran", lat:30.35, lon:48.3, cap:400, status:"damaged", note:"Iranian refinery; operational status uncertain" },
+  { name:"Dangote Refinery", country:"Nigeria", lat:6.43, lon:3.4, cap:650, status:"operating", note:"New mega-refinery; stepped up jet exports to Europe Apr 2026" },
+  { name:"Port Harcourt", country:"Nigeria", lat:4.77, lon:7.0, cap:210, status:"closed", note:"NNPC; inactive as of April 2026 after repeated shutdowns" },
+
+  { name:"ExxonMobil Baytown", country:"USA", lat:29.73, lon:-94.98, cap:560, status:"operating", note:"Largest US refinery; Gulf Coast PADD 3" },
+  { name:"Marathon Galveston Bay", country:"USA", lat:29.37, lon:-94.9, cap:586, status:"operating", note:"Texas City, TX; largest US capacity" },
+  { name:"Motiva Port Arthur", country:"USA", lat:29.9, lon:-93.9, cap:636, status:"operating", note:"Largest single US refinery; Saudi Aramco JV" },
+  { name:"Valero Port Arthur", country:"USA", lat:29.88, lon:-93.92, cap:310, status:"operating", note:"Gulf Coast; running near capacity" },
+  { name:"Phillips 66 Bayway", country:"USA", lat:40.63, lon:-74.23, cap:255, status:"operating", note:"Linden NJ; East Coast (PADD 1) hub" },
+  { name:"Philadelphia Energy Solutions", country:"USA", lat:39.9, lon:-75.18, cap:335, status:"closed", note:"CLOSED 2019 — fire; major East Coast capacity loss" },
+  { name:"LyondellBasell Houston", country:"USA", lat:29.8, lon:-95.3, cap:264, status:"closed", note:"CLOSED Q1 2025 — poor margins" },
+  { name:"Phillips 66 LA", country:"USA", lat:33.78, lon:-118.26, cap:139, status:"closed", note:"CLOSED Q4 2025 — California regulatory pressure" },
+  { name:"Valero Benicia", country:"USA", lat:38.07, lon:-122.15, cap:145, status:"closed", note:"IDLED Apr 2026 — California regulations; fuel production ceased" },
+  { name:"Phillips 66 Rodeo", country:"USA", lat:37.99, lon:-122.4, cap:120, status:"converted", note:"CONVERTED to renewable diesel 2024; ~50 kb/d renewable, no crude" },
+  { name:"Marathon Martinez", country:"USA", lat:38.02, lon:-122.13, cap:161, status:"converted", note:"CONVERTED to 48 kb/d renewable diesel 2023" },
+  { name:"Chevron El Segundo", country:"USA", lat:33.91, lon:-118.41, cap:269, status:"operating", note:"Southern CA; running under pressure after nearby closures" },
+  { name:"Valero Memphis", country:"USA", lat:35.17, lon:-90.05, cap:195, status:"operating", note:"Mid-continent; PADD 2" },
+  { name:"BP Whiting", country:"USA", lat:41.68, lon:-87.49, cap:430, status:"operating", note:"Indiana; largest Midwest refinery; heavy Canadian crude focus" },
+  { name:"WRB Borger", country:"USA", lat:35.65, lon:-101.4, cap:146, status:"operating", note:"Texas Panhandle; ConocoPhillips JV" },
+  { name:"Suncor Edmonton", country:"Canada", lat:53.55, lon:-113.5, cap:460, status:"operating", note:"Alberta; integrated oil sands upgrader + refinery" },
+  { name:"Imperial Oil Sarnia", country:"Canada", lat:42.97, lon:-82.4, cap:121, status:"operating", note:"Ontario; supplies Ontario/Quebec markets" },
+  { name:"Irving Saint John", country:"Canada", lat:45.27, lon:-66.07, cap:320, status:"operating", note:"New Brunswick; largest East Coast Canadian refinery; Atlantic import hub" },
+  { name:"Valero Quebec City", country:"Canada", lat:46.82, lon:-71.25, cap:235, status:"operating", note:"Jean-Gaulin; supplies Quebec market" },
+
+  { name:"Pernis (Shell)", country:"Netherlands", lat:51.88, lon:4.35, cap:400, status:"operating", note:"Europe's largest refinery; Rotterdam hub" },
+  { name:"Grangemouth (Petroineos)", country:"UK", lat:56.0, lon:-3.7, cap:210, status:"at-risk", note:"Only Scottish refinery; future uncertain 2026–27" },
+  { name:"Mossmorran (Shell)", country:"UK", lat:56.1, lon:-3.35, cap:100, status:"at-risk", note:"Shell cracker; planned phased closure 2026–2027" },
+  { name:"Gelsenkirchen (BP)", country:"Germany", lat:51.52, lon:7.1, cap:260, status:"operating", note:"BP reducing capacity; regulatory pressure" },
+  { name:"Livorno (Eni)", country:"Italy", lat:43.54, lon:10.3, cap:84, status:"closed", note:"Crude processing suspended; converting to logistics terminal" },
+  { name:"Rheinland (Shell)", country:"Germany", lat:50.87, lon:6.82, cap:338, status:"at-risk", note:"Shell exiting aromatics/olefins; crude refining continues for now" },
+
+  { name:"Reliance Jamnagar", country:"India", lat:22.47, lon:70.05, cap:1240, status:"operating", note:"World's largest refinery complex; critical Asia-Pacific hub" },
+  { name:"Zhoushan (Zhejiang Rongsheng)", country:"China", lat:29.95, lon:121.95, cap:800, status:"operating", note:"One of China's newest mega-refineries" },
+  { name:"Hengli Dalian", country:"China", lat:38.9, lon:121.65, cap:400, status:"operating", note:"Integrated refinery-petchem; 2019 startup" },
+  { name:"Topping Plant Vladivostok", country:"Russia", lat:43.1, lon:131.9, cap:80, status:"operating", note:"ROSNEFT" },
+  { name:"Ryazan (Rosneft)", country:"Russia", lat:54.6, lon:39.7, cap:175, status:"damaged", note:"Hit by Ukrainian drone Jan–May 2026; partial capacity" },
+];
+
+const PROCESS_STEPS = [
+  { num:"01", name:"Extraction & Production", color:"#58a6ff", location:"Oilfield → wellhead", transport:"Pipeline or tanker to export terminal", desc:"Crude oil is pumped from underground reservoirs — offshore platforms, land wells, or oil sands mining. In Canada this includes bitumen upgrading. The Hormuz closure has blocked ~20% of this step globally, as Gulf wells cannot export." },
+  { num:"02", name:"Crude Export & Shipping", color:"#58a6ff", location:"Export terminal → ocean → import terminal", transport:"Very Large Crude Carrier (VLCC) tankers, 2–4 weeks transit", desc:"Raw crude is loaded onto supertankers (VLCCs carry 2 million barrels each). These sail through chokepoints: Hormuz, Suez, Malacca. Hormuz carries 20 million b/d. When it closes, crude that was destined for Asian and European refineries must reroute (adding 2 weeks) or stop altogether." },
+  { num:"03", name:"Crude Intake & Storage", color:"#e3b341", location:"Import terminal / refinery tank farm", transport:"Pipeline from port to refinery (up to 500 km)", desc:"Crude arrives at the refinery via pipeline from the import terminal, or directly if coastal. Tank farms store 1–30 days of feed. The US Strategic Petroleum Reserve (SPR) is a 714M barrel emergency buffer. EIA tracks crude inventories weekly — drawdowns signal tightness." },
+  { num:"04", name:"Distillation (Atmospheric)", color:"#e3b341", location:"Refinery — distillation column", transport:"N/A — all within refinery fence", desc:"The first and most fundamental refinery step. Crude is heated to ~400°C in a furnace, then fed into a tall distillation column. Different products condense at different heights: LPG (top), naphtha/gasoline blendstock, jet fuel/kerosene, diesel, heavy fuel oil (bottom). No refinery skips this step." },
+  { num:"05", name:"Conversion (Cracking)", color:"#f0883e", location:"Refinery — FCC / Hydrocracker units", transport:"N/A — within refinery", desc:"Heavier products from distillation are 'cracked' into more valuable lighter ones — mainly gasoline and diesel. Fluid Catalytic Cracking (FCC) is the workhorse of US refineries. Hydrocrackers use hydrogen under pressure. This step is where refinery complexity matters: simple refineries can't do this, so they produce more low-value heavy fuel oil." },
+  { num:"06", name:"Treating & Blending", color:"#f0883e", location:"Refinery — hydrotreaters, blending tanks", transport:"N/A — within refinery", desc:"Sulfur is removed (hydrotreating) to meet clean-fuel regulations. California's CARB gasoline requires extra processing. Ethanol, additives, and detergents are blended in. Products are tested for spec conformance before leaving. This is where regulatory requirements add cost — and why California refineries became uneconomical." },
+  { num:"07", name:"Product Distribution Hub", color:"#3fb950", location:"Refinery rack → pipeline injection point", transport:"Colonial Pipeline, Plantation Pipeline, Enbridge, Trans Mountain (Canada)", desc:"Finished products are piped to distribution hubs (terminals). The Colonial Pipeline carries 100M gallons/day from Houston to New Jersey — the US East Coast's lifeline. A disruption here (like the 2021 hack) causes immediate regional shortages. Canada's Trans Mountain carries refined products to BC." },
+  { num:"08", name:"Bulk Terminal Storage", color:"#3fb950", location:"Port terminal or inland hub", transport:"Tanker truck, rail, or short pipeline to retail/airport", desc:"Products are held in bulk terminals near population centers. Jet fuel tanks sit at airports (2–7 days supply on-site). Gasoline is held at terminals for tanker truck loading. The Jones Act requires US-flagged ships for domestic coastal transport — which increases cost on the East Coast." },
+  { num:"09", name:"Retail / End Use", color:"#8b949e", location:"Gas station, airport, power plant, farm", transport:"Tanker truck (final delivery, ~300 km radius)", desc:"The final step: fuel delivered to gas stations by tanker trucks, jet fuel pumped into aircraft via hydrant systems, diesel to farms and construction sites. Price at this step reflects every upstream cost — crude price, refinery margin (crack spread), transport, taxes. California's $4.80/gal reflects all of the above plus 17% capacity loss." },
+];
+
+const closures = REFINERIES.filter(r => ['closed','converted','damaged','at-risk'].includes(r.status));
+const closureEl = document.getElementById('closure-list');
+closures.forEach(r => {
+  const row = document.createElement('div');
+  row.className = 'refinery-row';
+  const statusColors = { closed:'var(--red)', converted:'var(--purple)', damaged:'var(--amber)', 'at-risk':'var(--orange)' };
+  row.innerHTML = `
+    <div>
+      <div class="ref-name">${r.name}</div>
+      <div class="ref-loc">${r.country} · ${r.cap.toLocaleString()} kb/d</div>
+    </div>
+    <span style="font-size:10px; font-family:var(--mono); color:${statusColors[r.status]}">${r.status.toUpperCase()}</span>
+  `;
+  closureEl.appendChild(row);
+});
+
+const processFlow = document.getElementById('process-flow');
+PROCESS_STEPS.forEach((step, i) => {
+  const el = document.createElement('div');
+  el.className = 'process-step';
+  el.innerHTML = `
+    <div class="step-line">
+      <div class="step-num" style="background:${step.color}22; color:${step.color}; border:1px solid ${step.color}44">${step.num}</div>
+      <div class="step-connector"></div>
+    </div>
+    <div class="step-body">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between">
+        <div class="step-name">${step.name}</div>
+        <span class="step-arrow">▶</span>
+      </div>
+      <div class="step-location" style="color:${step.color}">${step.location}</div>
+      <div class="step-desc">
+        ${step.desc}
+        <div class="transport-badge">🚢 ${step.transport}</div>
+      </div>
+    </div>
+  `;
+  el.onclick = () => el.classList.toggle('open');
+  processFlow.appendChild(el);
+});
+
+function showPanel(panel) {
+  document.getElementById('panel-map').style.display = panel === 'map' ? 'grid' : 'none';
+  document.getElementById('panel-process').style.display = panel === 'process' ? 'block' : 'none';
+  document.getElementById('panel-data').style.display = panel === 'data' ? 'block' : 'none';
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+}
+
+const warStart = new Date('2026-02-28');
+const today = new Date('2026-05-19');
+const warDays = Math.floor((today - warStart) / 86400000);
+document.getElementById('war-days').textContent = warDays;
+document.getElementById('war-day-header').textContent = warDays;
+
+const layerState = { operating: true, closed: true, damaged: true, converted: true };
+function toggleLayer(layer) {
+  layerState[layer] = !layerState[layer];
+  document.getElementById('toggle-' + layer).classList.toggle('on', layerState[layer]);
+  renderDots();
+}
+
+let currentView = 'world';
+const views = {
+  world:     { scale: 153, translate: [480, 250] },
+  namerica:  { scale: 600, translate: [1050, 380] },
+  gulf:      { scale: 900, translate: [-200, 40] }
+};
+
+let svg, projection, path, dotsGroup;
+
+function initMap() {
+  const container = document.getElementById('world-map');
+  const W = container.clientWidth || 900;
+  const H = container.clientHeight || 600;
+
+  svg = d3.select('#world-map').append('svg')
+    .attr('width', W).attr('height', H);
+
+  const g = svg.append('g').attr('class', 'map-g');
+  dotsGroup = svg.append('g').attr('class', 'dots-g');
+
+  projection = d3.geoNaturalEarth1()
+    .scale(views.world.scale)
+    .translate(views.world.translate);
+  path = d3.geoPath().projection(projection);
+
+  const zoom = d3.zoom().scaleExtent([0.5, 12]).on('zoom', (e) => {
+    g.attr('transform', e.transform);
+    dotsGroup.attr('transform', e.transform);
+  });
+  svg.call(zoom);
+
+  d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json').then(world => {
+    g.selectAll('.country')
+      .data(topojson.feature(world, world.objects.countries).features)
+      .join('path')
+      .attr('class', 'country')
+      .attr('d', path);
+    renderDots();
+  });
+}
+
+function renderDots() {
+  if (!dotsGroup) return;
+  dotsGroup.selectAll('.refinery-dot').remove();
+
+  const statusColors = {
+    operating: '#3fb950',
+    closed: '#f85149',
+    damaged: '#e3b341',
+    converted: '#bc8cff',
+    'at-risk': '#f0883e'
+  };
+
+  REFINERIES.forEach(r => {
+    if (!layerState[r.status]) return;
+    const [x, y] = projection([r.lon, r.lat]);
+    if (!x || !y) return;
+
+    const radius = Math.max(3, Math.sqrt(r.cap) * 0.35);
+    const color = statusColors[r.status];
+
+    const g = dotsGroup.append('g')
+      .attr('class', 'refinery-dot')
+      .attr('transform', `translate(${x},${y})`);
+
+    g.append('circle')
+      .attr('r', radius)
+      .attr('fill', color + '55')
+      .attr('stroke', color)
+      .attr('stroke-width', 1);
+
+    if (r.status === 'damaged') {
+      g.append('circle')
+        .attr('r', radius + 3)
+        .attr('fill', 'none')
+        .attr('stroke', color)
+        .attr('stroke-width', 0.5)
+        .attr('opacity', 0.4);
+    }
+
+    g.on('mouseover', function(event) {
+      const tt = document.getElementById('tooltip');
+      const statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1);
+      tt.innerHTML = `
+        <div class="tooltip-name">${r.name}</div>
+        <div class="tooltip-detail">${r.country} · ${r.cap.toLocaleString()} kb/d</div>
+        <div class="tooltip-detail" style="margin-top:4px">${r.note}</div>
+        <div><span class="tooltip-status ${r.status}">${statusLabel}</span></div>
+      `;
+      tt.style.left = (event.offsetX + 12) + 'px';
+      tt.style.top = (event.offsetY - 10) + 'px';
+      tt.classList.add('visible');
+    }).on('mouseout', function() {
+      document.getElementById('tooltip').classList.remove('visible');
+    });
+  });
+}
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach(b => b.classList.remove('active'));
+  event.target.classList.add('active');
+
+  const v = views[view];
+  projection.scale(v.scale).translate(v.translate);
+  path = d3.geoPath().projection(projection);
+  d3.selectAll('.country').attr('d', path);
+  renderDots();
+}
+
+async function loadCSIData() {
+  const baseUrl = 'https://raw.githubusercontent.com/Sargjones/csi-global/main/csi_data_latest.json';
+  try {
+    const resp = await fetch(baseUrl);
+    if (!resp.ok) throw new Error('fetch failed');
+    const data = await resp.json();
+    const indicators = data.indicators || [];
+
+    const set = (id, valId, statId) => {
+      const ind = indicators.find(i => i.indicator && i.indicator.toLowerCase().includes(id.toLowerCase()));
+      if (!ind) return;
+      const el = document.getElementById(valId);
+      const sel = document.getElementById(statId);
+      if (el) {
+        el.textContent = ind.value !== undefined ? `${ind.value} ${ind.unit || ''}` : '—';
+        el.className = 'indicator-val ' + (ind.status === 'alert' ? 'alert' : ind.status === 'watch' ? 'watch' : 'ok');
+      }
+      if (sel) {
+        sel.textContent = ind.status || '—';
+        sel.className = 'indicator-status ' + (ind.status === 'alert' ? 's-alert' : ind.status === 'watch' ? 's-watch' : 's-ok');
+      }
+    };
+
+    set('Brent', 'brent-val', 'brent-status');
+    set('Baltic', 'bdi-val', 'bdi-status');
+    set('FAO', 'fao-val', 'fao-status');
+    set('supply shock', 'gdelt-val', 'gdelt-status');
+
+    const gen = data.meta?.generated_utc;
+    if (gen) document.getElementById('last-updated').textContent = 'CSI data: ' + gen.slice(0,10);
+  } catch(e) {
+    document.getElementById('brent-val').textContent = 'No live data';
+    document.getElementById('brent-val').style.color = 'var(--text2)';
+  }
+}
+
+initMap();
+loadCSIData();
+</script>
+</body>
+</html>
