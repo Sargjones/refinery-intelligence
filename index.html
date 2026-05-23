@@ -297,7 +297,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); font-si
   <div class="header-status">
     <div class="status-pill">
       <div class="pulse"></div>
-      HORMUZ CLOSED — DAY <span id="war-day-header">80</span>
+      HORMUZ CLOSED — DAY <span id="war-day-header">—</span>
     </div>
     <div class="nav">
       <button class="nav-btn active" onclick="showPanel('map')">Map</button>
@@ -354,7 +354,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); font-si
       <div class="section-label">Hormuz War Clock</div>
       <div class="war-clock">
         <div class="war-clock-label">Days since closure — Feb 28, 2026</div>
-        <div class="war-clock-days" id="war-days">80</div>
+        <div class="war-clock-days" id="war-days">—</div>
         <div class="war-clock-sub">~9.1 mb/d Gulf production shut-in · 21 days jet fuel supply (US)</div>
       </div>
       <div class="stat-grid">
@@ -364,7 +364,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); font-si
         </div>
         <div class="stat-card">
           <div class="stat-val" style="color:var(--amber)">3.52M</div>
-          <div class="stat-label">b/d war-damaged (May 2026)</div>
+          <div class="stat-label">b/d war-damaged (<span id="war-damaged-month">—</span>)</div>
         </div>
         <div class="stat-card">
           <div class="stat-val">132</div>
@@ -409,7 +409,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); font-si
         </div>
         <div class="timeline-item">
           <div class="timeline-dot" style="background:var(--blue)"></div>
-          <div class="timeline-date">May 19, 2026</div>
+          <div class="timeline-date" id="today-timeline-date">—</div>
           <div class="timeline-event"><strong>Today.</strong> North American airline route cuts emerging. CA pump prices ~$4.80/gal.</div>
         </div>
       </div>
@@ -517,7 +517,7 @@ body { background:var(--bg); color:var(--text); font-family:var(--font); font-si
 
 <div class="footer-bar">
   <span>Global Refinery Intelligence · criticalto.ca · Data: EIA, IIR, Argus Media, IEA, CSI-Global</span>
-  <span id="last-updated">Updated: May 19, 2026</span>
+  <span id="last-updated">—</span>
 </div>
 
 <script>
@@ -577,6 +577,30 @@ const PROCESS_STEPS = [
   { num:"09", name:"Retail / End Use", color:"#8b949e", location:"Gas station, airport, power plant, farm", transport:"Tanker truck (final delivery, ~300 km radius)", desc:"The final step: fuel delivered to gas stations by tanker trucks, jet fuel pumped into aircraft via hydrant systems, diesel to farms and construction sites. Price at this step reflects every upstream cost — crude price, refinery margin (crack spread), transport, taxes. California's $4.80/gal reflects all of the above plus 17% capacity loss." },
 ];
 
+// ── DYNAMIC DATE/TIME CALCULATIONS ──────────────────────────────────────────
+
+const warStart = new Date('2026-02-28T00:00:00Z');
+const now = new Date(); // always today — never hardcoded
+
+// War day counter (both header pill and sidebar clock)
+const warDays = Math.floor((now - warStart) / 86400000);
+document.getElementById('war-days').textContent = warDays;
+document.getElementById('war-day-header').textContent = warDays;
+
+// "Today" entry in the timeline
+const todayFormatted = now.toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
+document.getElementById('today-timeline-date').textContent = todayFormatted;
+
+// "b/d war-damaged (Month YYYY)" label — always current month
+const warDamagedMonth = now.toLocaleDateString('en-CA', { month:'long', year:'numeric' });
+document.getElementById('war-damaged-month').textContent = warDamagedMonth;
+
+// Footer — set to today; will be overwritten by CSI data timestamp if available
+document.getElementById('last-updated').textContent =
+  'Updated: ' + now.toLocaleDateString('en-CA', { year:'numeric', month:'long', day:'numeric' });
+
+// ── CLOSURE LIST ─────────────────────────────────────────────────────────────
+
 const closures = REFINERIES.filter(r => ['closed','converted','damaged','at-risk'].includes(r.status));
 const closureEl = document.getElementById('closure-list');
 closures.forEach(r => {
@@ -592,6 +616,8 @@ closures.forEach(r => {
   `;
   closureEl.appendChild(row);
 });
+
+// ── PROCESS STEPS ────────────────────────────────────────────────────────────
 
 const processFlow = document.getElementById('process-flow');
 PROCESS_STEPS.forEach((step, i) => {
@@ -618,6 +644,8 @@ PROCESS_STEPS.forEach((step, i) => {
   processFlow.appendChild(el);
 });
 
+// ── PANEL NAVIGATION ─────────────────────────────────────────────────────────
+
 function showPanel(panel) {
   document.getElementById('panel-map').style.display = panel === 'map' ? 'grid' : 'none';
   document.getElementById('panel-process').style.display = panel === 'process' ? 'block' : 'none';
@@ -626,11 +654,7 @@ function showPanel(panel) {
   event.target.classList.add('active');
 }
 
-const warStart = new Date('2026-02-28');
-const today = new Date('2026-05-19');
-const warDays = Math.floor((today - warStart) / 86400000);
-document.getElementById('war-days').textContent = warDays;
-document.getElementById('war-day-header').textContent = warDays;
+// ── MAP ──────────────────────────────────────────────────────────────────────
 
 const layerState = { operating: true, closed: true, damaged: true, converted: true };
 function toggleLayer(layer) {
@@ -749,6 +773,8 @@ function switchView(view) {
   renderDots();
 }
 
+// ── CSI LIVE DATA ────────────────────────────────────────────────────────────
+
 async function loadCSIData() {
   const baseUrl = 'https://raw.githubusercontent.com/Sargjones/csi-global/main/csi_data_latest.json';
   try {
@@ -777,8 +803,11 @@ async function loadCSIData() {
     set('FAO', 'fao-val', 'fao-status');
     set('supply shock', 'gdelt-val', 'gdelt-status');
 
+    // Overwrite footer with CSI data timestamp if available
     const gen = data.meta?.generated_utc;
-    if (gen) document.getElementById('last-updated').textContent = 'CSI data: ' + gen.slice(0,10);
+    if (gen) {
+      document.getElementById('last-updated').textContent = 'CSI data: ' + gen.slice(0,10);
+    }
   } catch(e) {
     document.getElementById('brent-val').textContent = 'No live data';
     document.getElementById('brent-val').style.color = 'var(--text2)';
